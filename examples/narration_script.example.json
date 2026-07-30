@@ -1,0 +1,15 @@
+{
+  "script_lines": [
+    {
+      "timestamp": "00:00",
+      "narration": "First line, describing what's on screen at the start.",
+      "duration_estimate_sec": 8
+    },
+    {
+      "timestamp": "00:11",
+      "narration": "Next beat — [short pause] tags can steer delivery.",
+      "duration_estimate_sec": 7
+    }
+  ],
+  "full_script": "Optional: the whole script as one string."
+}

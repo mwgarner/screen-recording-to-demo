@@ -1,0 +1,32 @@
+# Secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.Python
+*.egg-info/
+dist/
+build/
+
+# Pipeline outputs (regenerable; can contain your product UI)
+output/
+*.wav
+*.mp3
+*.mp4
+*.mov
+*.mkv
+*.prores
+*.m4a
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
