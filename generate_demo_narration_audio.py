@@ -114,7 +114,6 @@ def load_api_key() -> str:
     sys.exit(1)
 
 
-
 def timestamp_to_ms(value: str) -> int:
     parts = value.strip().split(":")
     if len(parts) != 2:

@@ -510,7 +510,6 @@ def load_api_key() -> str:
     sys.exit(1)
 
 
-
 def wait_for_file_active(client: genai.Client, uploaded_file: types.File) -> types.File:
     name = uploaded_file.name
     if not name:
@@ -803,6 +802,12 @@ def main() -> None:
         action="store_true",
         help="With --narration-only: refresh narration_script.model.json but keep narration_script.json",
     )
+    parser.add_argument(
+        "--keep-uploaded-file",
+        action="store_true",
+        help="Do not delete the video from the Gemini File API after analysis "
+        "(default: delete when possible)",
+    )
     args = parser.parse_args()
 
     product_context = "" if args.no_product_context else load_product_context(args.product_context)
@@ -902,11 +907,23 @@ def main() -> None:
     if args.narration:
         write_narration_outputs(client, args.narration_model, timeline, product_context, output_dir)
 
-    try:
-        if video_file.name:
-            client.files.delete(name=video_file.name)
-    except Exception:
-        pass
+    if args.keep_uploaded_file:
+        print(f"Keeping uploaded File API object: {video_file.name}")
+    else:
+        try:
+            if video_file.name:
+                client.files.delete(name=video_file.name)
+                print(f"Deleted uploaded File API object: {video_file.name}")
+        except Exception as exc:
+            print(
+                f"WARNING: could not delete uploaded File API object "
+                f"{getattr(video_file, 'name', None)}: {exc}",
+                file=sys.stderr,
+            )
+            print(
+                "Delete it manually in AI Studio / the Files API if it contains sensitive footage.",
+                file=sys.stderr,
+            )
 
     print("Done.")
     print(f"Next: edit {output_dir / 'narration_script.json'} then run generate_demo_narration_audio.py on:")
