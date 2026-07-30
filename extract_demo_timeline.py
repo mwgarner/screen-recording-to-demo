@@ -53,6 +53,17 @@ def slugify_cut_name(stem: str) -> str:
     return slug or "demo"
 
 
+def guess_video_mime(path: Path) -> str:
+    """Best-effort MIME type for Gemini File API / Part references."""
+    return {
+        ".mp4": "video/mp4",
+        ".m4v": "video/mp4",
+        ".mov": "video/quicktime",
+        ".webm": "video/webm",
+        ".mkv": "video/x-matroska",
+    }.get(path.suffix.lower(), "video/mp4")
+
+
 def new_run_id() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -68,10 +79,18 @@ def allocate_run_dir(output_root: Path, cut_slug: str, run_id: str | None = None
     run_dir.mkdir(parents=True, exist_ok=False)
 
     latest = cut_dir / "latest"
-    if latest.is_symlink() or latest.exists():
-        latest.unlink()
-    # Relative symlink so the tree stays portable when moved.
-    latest.symlink_to(Path("runs") / rid)
+    try:
+        if latest.is_symlink() or latest.exists():
+            latest.unlink()
+        # Relative symlink so the tree stays portable when moved.
+        latest.symlink_to(Path("runs") / rid)
+    except OSError as exc:
+        # Common on Windows without Developer Mode / symlink privilege.
+        print(
+            f"WARNING: could not create 'latest' symlink ({exc}). "
+            f"Pass the run directory explicitly to the next script:\n  {run_dir}",
+            file=sys.stderr,
+        )
     return run_dir
 
 
@@ -528,12 +547,35 @@ def wait_for_file_active(client: genai.Client, uploaded_file: types.File) -> typ
     raise TimeoutError("Timed out waiting for uploaded video to become ACTIVE")
 
 
-def upload_video(client: genai.Client, video_path: Path) -> types.File:
-    print(f"Uploading video ({video_path.stat().st_size / 1024 / 1024:.1f} MB)...")
-    uploaded = client.files.upload(file=str(video_path))
+class UploadedVideo:
+    """File API handle plus a guaranteed MIME for Part references."""
+
+    def __init__(self, file: types.File, mime_type: str) -> None:
+        self.file = file
+        self.mime_type = mime_type or getattr(file, "mime_type", None) or "video/mp4"
+
+    @property
+    def name(self) -> str | None:
+        return getattr(self.file, "name", None)
+
+    @property
+    def uri(self) -> str | None:
+        return getattr(self.file, "uri", None)
+
+
+def upload_video(client: genai.Client, video_path: Path) -> UploadedVideo:
+    mime = guess_video_mime(video_path)
+    size_mb = video_path.stat().st_size / 1024 / 1024
+    print(f"Uploading video ({size_mb:.1f} MB, {mime})...")
+    try:
+        uploaded = client.files.upload(file=str(video_path), config={"mime_type": mime})
+    except TypeError:
+        # Older google-genai SDKs may not accept config=mime_type.
+        uploaded = client.files.upload(file=str(video_path))
     active = wait_for_file_active(client, uploaded)
-    print(f"Upload ready: {active.uri}")
-    return active
+    resolved = getattr(active, "mime_type", None) or mime
+    print(f"Upload ready: {active.uri} ({resolved})")
+    return UploadedVideo(active, resolved)
 
 
 def extract_json_from_response(text: str) -> dict:
@@ -558,7 +600,7 @@ def generate_json(
     model: str,
     prompt: str,
     *,
-    video_file: types.File | None = None,
+    video_file: UploadedVideo | types.File | None = None,
     start_sec: int | None = None,
     end_sec: int | None = None,
     fps: float | None = None,
@@ -572,9 +614,11 @@ def generate_json(
                 end_offset=offset_seconds(end_sec) if end_sec is not None else None,
                 fps=fps,
             )
+        uri = getattr(video_file, "uri", None)
+        mime_type = getattr(video_file, "mime_type", None) or "video/mp4"
         contents.append(
             types.Part(
-                file_data=types.FileData(file_uri=video_file.uri, mime_type="video/mp4"),
+                file_data=types.FileData(file_uri=uri, mime_type=mime_type),
                 video_metadata=video_metadata,
             )
         )
@@ -612,7 +656,7 @@ def count_events_per_chapter(chapters: list[dict], events: list[dict]) -> dict[s
 def extract_timeline_dense(
     client: genai.Client,
     model: str,
-    video_file: types.File,
+    video_file: UploadedVideo | types.File,
     product_context: str,
     *,
     gap_fill: bool = True,

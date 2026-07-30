@@ -92,9 +92,20 @@ python3 generate_demo_captions.py \
 Optional loudness normalize (YouTube-ish target, −14 LUFS):
 
 ```bash
-ffmpeg -i narrated.mp4 -af loudnorm=I=-14:TP=-1.5:LRA=11 \
+ffmpeg -i "output/demo-timeline/$CUT/deliverables/<stamp>/$CUT-narrated-1080p.mp4" \
+  -af loudnorm=I=-14:TP=-1.5:LRA=11 \
   -c:v copy -c:a aac -b:a 192k narrated-normalized.mp4
 ```
+
+## Scripts
+
+| File | Role |
+|---|---|
+| `extract_demo_timeline.py` | Gemini multi-pass timeline + draft narration |
+| `generate_demo_narration_audio.py` | Continuous TTS + optional fit-to-picture align |
+| `mux_demo_deliverable.sh` | Mux timeline WAV onto a picture master |
+| `generate_demo_captions.py` | WebVTT from `audio/manifest.json` |
+| `examples/product-context.example.md` | Template for grounding narration claims |
 
 ## Run layout
 
@@ -193,6 +204,14 @@ length so padding and windows match the picture.
   short silence can remain. Fix the copy.
 - Model IDs in the defaults are moving targets; override with `--model` /
   `--narration-model` when Google renames them.
+- Gemini usage is billed to **your** Google AI Studio / Cloud project. Preview
+  models and multi-pass video analysis can get expensive — start with
+  `--single-pass` on a short clip.
+- The `latest` pointer is a symlink (may need Developer Mode / admin rights on
+  Windows). If symlink creation fails, the script prints the run directory to
+  pass explicitly.
+- Screen recordings as `.mov` / `.mp4` / `.webm` / `.mkv` are supported; analyze
+  a compressed proxy when the master is huge.
 
 ## Alternatives considered
 
